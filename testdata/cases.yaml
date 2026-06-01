@@ -1,0 +1,68 @@
+- id: billing-refund
+  ticket: >
+    I was charged twice this month and I want a refund.
+    This is really frustrating.
+  gold:
+    category: billing
+    severity: medium
+    needs_human: true
+    assignee: Morticia
+  reply_rubric: >
+    Acknowledge the duplicate charge, say the billing team will review it,
+    and avoid promising an immediate refund. Do not joke about the refund.
+  reply_must:
+    - duplicate charge
+    - review
+  reply_must_not:
+    - guaranteed refund
+
+- id: bug-login
+  ticket: >
+    Since the last update, I get a blank page every time I sign in.
+    I cannot access my dashboard.
+  gold:
+    category: bug
+    severity: high
+    needs_human: true
+    assignee: Gomez
+  reply_rubric: >
+    Acknowledge that login is blocked, say the issue is being escalated,
+    and ask for browser or device details if needed. Do not joke about blocked access.
+  reply_must:
+    - sign in
+    - escalated
+  reply_must_not:
+    - billing
+
+- id: account-email
+  ticket: How do I change the email address on my account?
+  gold:
+    category: account
+    severity: low
+    needs_human: false
+    assignee: Wednesday
+  reply_rubric: >
+    Give a concise account-settings answer and mention verification or security.
+    Light Addams-style humor is fine if the useful instructions remain clear.
+  reply_must:
+    - account settings
+    - verify
+  reply_must_not:
+    - refund
+
+- id: feature-export
+  ticket: >
+    It would be useful if reports could be exported as CSV every Friday morning.
+  gold:
+    category: feature
+    severity: low
+    needs_human: false
+    assignee: Pugsley
+  reply_rubric: >
+    Thank the customer for the feature request and say it will be shared or tracked.
+    Light Addams-style humor is fine if the useful response remains clear.
+  reply_must:
+    - feature request
+    - shared
+  reply_must_not:
+    - bug

@@ -1,0 +1,27 @@
+Judge the support reply.
+
+Return exactly one JSON object and no markdown:
+{
+  "score": 1,
+  "reason": "short reason"
+}
+
+Score from 1 to 5:
+1 means the reply is wrong or unsafe.
+3 means the reply is acceptable but incomplete.
+5 means the reply fully satisfies the rubric.
+
+Ticket:
+%s
+
+Rubric:
+%s
+
+The reply must mention:
+%s
+
+The reply must not mention:
+%s
+
+Reply:
+%s
