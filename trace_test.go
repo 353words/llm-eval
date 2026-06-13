@@ -13,11 +13,10 @@ func TestSaveTrace(t *testing.T) {
 	}
 
 	trace := Trace{
-		CaseID: "case-1",
 		Ticket: "ticket",
-		Score:  Score{Parsed: true},
 	}
-	if err := SaveTrace(trace); err != nil {
+	evalTrace := EvalTrace{CaseID: "case-1", Ticket: trace.Ticket}
+	if err := saveTrace(evalTrace); err != nil {
 		t.Fatalf("save trace: %s", err)
 	}
 

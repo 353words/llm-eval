@@ -1,9 +1,15 @@
 package main
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"strings"
+
+	"github.com/tmc/langchaingo/llms"
 )
 
 func main() {
@@ -14,33 +20,40 @@ func main() {
 }
 
 func run() error {
-	if len(os.Args) < 2 {
-		usage()
-		return nil
+	llm, err := NewLLM()
+	if err != nil {
+		return err
 	}
 
-	switch os.Args[1] {
-	case "eval":
-		llm, err := NewLLM()
+	return repl(context.Background(), llm, os.Stdin, os.Stdout)
+}
+
+func repl(ctx context.Context, llm llms.Model, r io.Reader, w io.Writer) error {
+	fmt.Fprintln(w, "Help desk triage. Enter a ticket and press Ctrl-D to exit.")
+	fmt.Fprint(w, ">>> ")
+
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		ticket := strings.TrimSpace(scanner.Text())
+		if ticket == "" {
+			fmt.Fprint(w, ">>> ")
+			continue
+		}
+
+		pred, _, err := Triage(ctx, llm, ticket)
+		if err != nil {
+			fmt.Fprintf(w, "ERROR: %s\n", err)
+			fmt.Fprint(w, ">>> ")
+			continue
+		}
+
+		data, err := json.MarshalIndent(pred, "", "  ")
 		if err != nil {
 			return err
 		}
-
-		return RunEval(context.Background(), llm)
-	case "trace":
-		if len(os.Args) != 3 {
-			return fmt.Errorf("usage: go run . trace <case-id>")
-		}
-
-		return PrintTrace(os.Args[2])
-	default:
-		usage()
-		return nil
+		fmt.Fprintln(w, string(data))
+		fmt.Fprint(w, ">>> ")
 	}
-}
 
-func usage() {
-	fmt.Println("usage:")
-	fmt.Println("  go run . eval")
-	fmt.Println("  go run . trace <case-id>")
+	return scanner.Err()
 }

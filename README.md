@@ -34,21 +34,30 @@ You can set `KRONK_WEB_API_HOST` if your server is running somewhere else.
 You can set `LLM_MODEL` to use a different model.
 The code uses `github.com/tmc/langchaingo` to talk to the model, as in the previous posts.
 
-Run the eval:
+Run the help desk REPL:
 
 ```sh
-$ go run . eval
+$ go run .
+Help desk triage. Enter a ticket and press Ctrl-D to exit.
+>>> I was charged twice this month and I want a refund.
+{
+  "category": "billing",
+  "severity": "medium",
+  "needs_human": true,
+  "assignee": "Morticia",
+  "reply": "Thanks for reporting the duplicate charge. Morticia will review it carefully and follow up before this bill rises again."
+}
 ```
 
-To inspect one trace:
+Run the eval test:
 
 ```sh
-$ go run . trace billing-refund
+$ RUN_LLM_EVAL=1 go test -run TestEval -v
 ```
 
 ### Application Overview
 
-The application evaluates a support ticket workflow.
+The application is a tiny help desk REPL for a support ticket workflow.
 For every ticket, the LLM needs to return JSON in this shape:
 
 ```json
@@ -144,16 +153,16 @@ The judge returns JSON:
 Use an LLM judge for subjective criteria.
 Keep exact checks for everything deterministic.
 
-### Eval Report
+### Eval Test
 
-At the end, the CLI prints a compact report:
+The eval runs as a Go test, not as application code.
+By default the test is skipped so `go test ./...` doesn't require a running model.
+Set `RUN_LLM_EVAL=1` to run it.
+
+At the end, the test prints a compact report:
 
 ```text
-cases: 4
-passed: 3
-parse ok: 4
-judge average: 4.2
-failed: bug-login
+eval_test.go:92: passed 3/4
 ```
 
 The report tells you whether things improved.
