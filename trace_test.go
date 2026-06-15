@@ -12,11 +12,8 @@ func TestSaveTrace(t *testing.T) {
 		t.Fatalf("mkdir: %s", err)
 	}
 
-	trace := Trace{
-		Ticket: "ticket",
-	}
-	evalTrace := EvalTrace{CaseID: "case-1", Ticket: trace.Ticket}
-	if err := saveTrace(evalTrace); err != nil {
+	trace := EvalTrace{CaseID: "case-1", Trace: Trace{Ticket: "ticket"}}
+	if err := saveTrace(trace); err != nil {
 		t.Fatalf("save trace: %s", err)
 	}
 

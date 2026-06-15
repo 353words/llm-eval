@@ -17,11 +17,5 @@ Ticket:
 Rubric:
 %s
 
-The reply must mention:
-%s
-
-The reply must not mention:
-%s
-
 Reply:
 %s

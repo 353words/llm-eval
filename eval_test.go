@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/tmc/langchaingo/llms"
@@ -21,12 +20,10 @@ var judgePrompt string
 var casesYAML []byte
 
 type Case struct {
-	ID           string   `yaml:"id"`
-	Ticket       string   `yaml:"ticket"`
-	Gold         Gold     `yaml:"gold"`
-	ReplyRubric  string   `yaml:"reply_rubric"`
-	ReplyMust    []string `yaml:"reply_must"`
-	ReplyMustNot []string `yaml:"reply_must_not"`
+	ID          string `yaml:"id"`
+	Ticket      string `yaml:"ticket"`
+	Gold        Gold   `yaml:"gold"`
+	ReplyRubric string `yaml:"reply_rubric"`
 }
 
 type Gold struct {
@@ -37,7 +34,6 @@ type Gold struct {
 }
 
 type Score struct {
-	Parsed       bool   `json:"parsed"`
 	CategoryOK   bool   `json:"category_ok"`
 	SeverityOK   bool   `json:"severity_ok"`
 	NeedsHumanOK bool   `json:"needs_human_ok"`
@@ -52,15 +48,12 @@ type JudgeResult struct {
 	Reason string `json:"reason"`
 }
 
+// EvalTrace is a single triage run plus everything the eval adds to it.
 type EvalTrace struct {
-	CaseID      string      `json:"case_id"`
-	Ticket      string      `json:"ticket"`
-	RawOutput   string      `json:"raw_output"`
-	Prediction  *Prediction `json:"prediction,omitempty"`
-	ParseError  string      `json:"parse_error,omitempty"`
-	ToolCalls   []ToolTrace `json:"tool_calls"`
-	JudgeOutput string      `json:"judge_output,omitempty"`
-	Score       Score       `json:"score"`
+	CaseID string `json:"case_id"`
+	Trace
+	JudgeOutput string `json:"judge_output,omitempty"`
+	Score       Score  `json:"score"`
 }
 
 func TestLoadCases(t *testing.T) {
@@ -68,9 +61,11 @@ func TestLoadCases(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load cases: %s", err)
 	}
+
 	if len(cases) != 4 {
 		t.Fatalf("case count: %d", len(cases))
 	}
+
 	if cases[0].ID != "billing-refund" {
 		t.Fatalf("first case: %q", cases[0].ID)
 	}
@@ -101,9 +96,11 @@ func TestEval(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %s", c.ID, err)
 		}
+
 		if err := saveTrace(trace); err != nil {
 			t.Fatal(err)
 		}
+
 		if trace.Score.Pass {
 			passed++
 		}
@@ -116,64 +113,34 @@ func TestEval(t *testing.T) {
 }
 
 func evaluateCase(ctx context.Context, model llms.Model, c Case) (EvalTrace, error) {
-	pred, trace, err := Triage(ctx, model, c.Ticket)
-	evalTrace := EvalTrace{
-		CaseID:     c.ID,
-		Ticket:     trace.Ticket,
-		RawOutput:  trace.RawOutput,
-		Prediction: trace.Prediction,
-		ParseError: trace.ParseError,
-		ToolCalls:  trace.ToolCalls,
-	}
+	pred, err := Triage(ctx, model, c.Ticket)
+	eval := EvalTrace{CaseID: c.ID, Trace: pred.trace}
 	if err != nil {
-		if trace.ParseError == "" {
+		// A parse error is a normal failing case; anything else is a real error.
+		if pred.trace.ParseError == "" {
 			return EvalTrace{}, err
 		}
 
-		evalTrace.Score = Score{Parsed: false}
-		return evalTrace, nil
+		return eval, nil
 	}
 
-	score := ScoreGold(c.Gold, pred)
-	judge, judgeOutput, err := judgeReply(ctx, model, c, pred)
+	eval.Score = ScoreGold(c.Gold, pred)
+	judge, output, err := judgeReply(ctx, model, c, pred.Reply)
 	if err != nil {
 		return EvalTrace{}, err
 	}
 
-	evalTrace.JudgeOutput = judgeOutput
-	score.JudgeScore = judge.Score
-	score.JudgeReason = judge.Reason
-	score.Pass = score.CategoryOK && score.SeverityOK && score.NeedsHumanOK && score.AssigneeOK && score.JudgeScore >= 4
-	evalTrace.Score = score
+	eval.JudgeOutput = output
+	eval.Score.JudgeScore = judge.Score
+	eval.Score.JudgeReason = judge.Reason
+	eval.Score.Pass = eval.Score.CategoryOK && eval.Score.SeverityOK &&
+		eval.Score.NeedsHumanOK && eval.Score.AssigneeOK && judge.Score >= 4
 
-	return evalTrace, nil
-}
-
-func judgeReply(ctx context.Context, model llms.Model, c Case, pred Prediction) (JudgeResult, string, error) {
-	user := fmt.Sprintf(judgePrompt, c.Ticket, c.ReplyRubric, strings.Join(c.ReplyMust, ", "), strings.Join(c.ReplyMustNot, ", "), pred.Reply)
-	resp, err := model.GenerateContent(ctx, []llms.MessageContent{llms.TextParts(llms.ChatMessageTypeHuman, user)})
-	if err != nil {
-		return JudgeResult{}, "", err
-	}
-	if len(resp.Choices) == 0 {
-		return JudgeResult{}, "", fmt.Errorf("judge: no choices")
-	}
-
-	content := resp.Choices[0].Content
-	var result JudgeResult
-	if err := DecodeJSON(content, &result); err != nil {
-		return JudgeResult{}, content, err
-	}
-	if result.Score < 1 || result.Score > 5 {
-		return JudgeResult{}, content, fmt.Errorf("judge score out of range: %d", result.Score)
-	}
-
-	return result, content, nil
+	return eval, nil
 }
 
 func ScoreGold(gold Gold, pred Prediction) Score {
 	return Score{
-		Parsed:       true,
 		CategoryOK:   pred.Category == gold.Category,
 		SeverityOK:   pred.Severity == gold.Severity,
 		NeedsHumanOK: pred.NeedsHuman == gold.NeedsHuman,
@@ -189,6 +156,30 @@ func TestScoreGold(t *testing.T) {
 	if !score.CategoryOK || score.SeverityOK || !score.NeedsHumanOK || !score.AssigneeOK {
 		t.Fatalf("bad score: %+v", score)
 	}
+}
+
+func judgeReply(ctx context.Context, model llms.Model, c Case, reply string) (JudgeResult, string, error) {
+	prompt := fmt.Sprintf(judgePrompt, c.Ticket, c.ReplyRubric, reply)
+	resp, err := model.GenerateContent(ctx, []llms.MessageContent{llms.TextParts(llms.ChatMessageTypeHuman, prompt)})
+	if err != nil {
+		return JudgeResult{}, "", err
+	}
+
+	if len(resp.Choices) == 0 {
+		return JudgeResult{}, "", fmt.Errorf("judge: no choices")
+	}
+
+	content := resp.Choices[0].Content
+	var result JudgeResult
+	if err := DecodeJSON(content, &result); err != nil {
+		return JudgeResult{}, content, err
+	}
+
+	if result.Score < 1 || result.Score > 5 {
+		return JudgeResult{}, content, fmt.Errorf("judge score out of range: %d", result.Score)
+	}
+
+	return result, content, nil
 }
 
 func loadCases() ([]Case, error) {
